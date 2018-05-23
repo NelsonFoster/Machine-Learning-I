@@ -1,0 +1,461 @@
+---
+title: 'DATS 6202 - Homework #4'
+author: "Nelson Foster"
+date: "4/16/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+getwd()
+
+library(glmnet)
+library(ISLR)
+library(plotmo)
+library(gradDescent)
+library(caret)
+library(dplyr)
+```
+
+```{r}
+
+
+#read in datasets & explore
+
+CreditBalance <- read.csv('CreditBalance.csv')
+social <- read.csv('social.csv')
+wages <- read.csv('wages.csv')
+
+#cor(CreditBalance) Error in cor(CreditBalance) : 'x' must be numeric
+head(CreditBalance)
+str(CreditBalance)
+View(CreditBalance)
+```
+Credit Balance Dataset
+Questions:
+(a) Estimate this regression model using ordinary least squares. Interpret your results.
+
+```{r}
+
+#Beginning by standardizing the inputs
+
+#CreditBalance_stand <- data.frame(scale(CreditBalance)) Error in colMeans(x, na.rm = TRUE) : 'x' must be numeric
+
+ols_CreditBalance <- lm(Balance~., data = CreditBalance)
+
+ols_CreditBalance_coef <- data.frame(ols_CreditBalance$coefficients)
+ols_CreditBalance_pred <- predict(ols_CreditBalance)
+View(ols_CreditBalance_coef)
+head(ols_CreditBalance_pred)
+summary(ols_CreditBalance)
+#head(CreditBalance_stand$Balance)
+
+#income, limit, cards and student yes have the greatest significance, rerunning OLS with those features
+ols_CreditBalance2 <-lm(Balance~Income + Limit + Cards + Student, data = CreditBalance)
+summary(ols_CreditBalance2)
+
+```
+
+
+(b) Estimate this regression model using ridge regression, find the optimal value of lambda, and find the parameter estimates associated with the optimal lambda.
+```{r}
+#beginning by splitting dataset into test/train data
+n_obs = dim(CreditBalance)[1]
+n_obs
+prop_split = 0.66
+train_index = sample(1:n_obs, round(n_obs * prop_split))
+predictors <- CreditBalance[c(1:10,12)]
+head(predictors)
+target <- CreditBalance$Balance
+head(target)
+#Ridge Regression Requires a Matrix vice a Dataframe
+predictors <- model.matrix(Balance~., predictors)
+str(predictors)
+pred_tr = predictors[train_index,]
+pred_te = predictors[-train_index,]
+target_tr = target[train_index]
+target_te = target[-train_index]
+
+#building the model
+
+library(glmnet)
+
+ridge.balance <- glmnet(pred_te,target_te, alpha = 0, nlambda = 100, lambda.min.ratio = .0001)
+
+#Let's look with the least amount of penality 
+balance_coefs100 <- data.frame(coef(ridge.balance)[,100])
+View(balance_coefs100)
+
+#Now let's look at the highest penality 
+balance_coefs1<- data.frame(coef(ridge.balance)[,1])
+View(balance_coefs1)
+
+balance_lambda <- data.frame(ridge.balance$lambda)
+View(balance_lambda)
+
+#We can also take a look at a more fine tuned graphical output 
+
+plot_glmnet(ridge.balance,xvar="lambda",label=5)
+plot_glmnet(ridge.balance,label=5)
+
+#cross validation
+
+set.seed(100)
+cv.balance.ridge <- cv.glmnet(predictors, target, alpha=0, nlambda=100, lambda.min.ratio=.0001)
+#Let's take a look and see if we can see the minumum
+plot(cv.balance.ridge)
+
+#Let's take a look under the hood, here we have the lambda outputs, the mean cross validated error and the estimate of the standard error of the cvm
+cv.balance.ridge.output <- data.frame(cv.balance.ridge$lambda,cv.balance.ridge$cvm,cv.balance.ridge$cvsd)
+
+View(cv.balance.ridge.output)
+
+#This will provide our best lambda output
+best.penality <- cv.balance.ridge$lambda.min
+best.penality
+
+
+balance.best.coef <- data.frame(predict(ridge.balance, s=best.penality, type="coefficients")[1:12, ])
+View(balance.best.coef)
+cv.balance.ridge$lambda
+
+plot(cv.balance.ridge, xvar = 'lambda')
+```
+
+(c) Estimate this regression model using lasso regression, find the optimal value of lambda, and find the parameter estimates associated with the optimal lambda.
+
+
+```{r}
+
+#repeat splitting actions from above
+n_obs = dim(CreditBalance)[1]
+n_obs
+prop_split = 0.66
+train_index = sample(1:n_obs, round(n_obs * prop_split))
+predictors <- CreditBalance[c(1:10,12)]#Here we are omitting the target variable
+head(predictors)
+target <- CreditBalance$Balance#Here we are creating the target variable 
+head(target)
+
+#Lasso also Regression Requires a Matrix vice a Dataframe, just like ridge
+predictors <- model.matrix(Balance~., predictors)
+str(predictors)
+head(predictors)
+pred_tr = predictors[train_index,]
+pred_te = predictors[-train_index,]
+target_tr = target[train_index]
+target_te = target[-train_index]
+set.seed(101)
+#here we are going to train our lambda then embed it into our lasso model 
+cv.balance.lasso <- cv.glmnet(pred_tr, target_tr, family="gaussian", alpha=1, nlambda=100, lambda.min.ratio=.0001)
+
+coef(cv.balance.lasso, s=cv.balance.lasso$lambda.1se)
+
+#if we embed it back into another lasso we get the same result
+cv.balance.lasso.1 <- glmnet(pred_tr, target_tr, alpha=1,lambda = cv.balance.lasso$lambda.1se)
+#same coefs
+
+coef(cv.balance.lasso.1)
+
+plot(cv.balance.lasso, xvar = 'lambda')
+
+#"xvar" is not a graphical parameter??
+```
+
+```{r}
+#comparing Ridge and Lasso using RMSE, in order to answer questions c and d
+
+
+y_hat_ridge <- predict(cv.balance.ridge, pred_te)
+RMSE_Ridge <- sqrt(mean((target_te-y_hat_ridge)^2))
+RMSE_Ridge 
+
+y_hat_lasso <- predict(cv.balance.lasso, pred_te)
+RMSE_Lasso <- sqrt(mean((target_te-y_hat_lasso)^2)) 
+RMSE_Lasso
+
+y_hat_ols <- predict(ols_CreditBalance)
+
+RMSE_ols <- sqrt(mean(y_hat_ols^2))
+RMSE_ols
+
+
+y_hat_ols2 <-predict(ols_CreditBalance2)
+
+RMSE_ols2 <- sqrt(mean(y_hat_ols2^2))
+RMSE_ols2
+
+```
+
+
+
+(d) Assume your main interest is prediction rather than inference, given your results in (a)-(c) which model would you report and why?
+
+I would report model c, as it has the lawer RMSE. 
+
+(e) Between the ridge and lasso regression modeling, which is the best model and why? Remember to fix the seed in R before doing your cross validation.
+
+The Lasso model is the better of the two, as it has lower RMSE (105.58) than the Ridge model (120.81) and OLS (686.89)
+
+*********************
+
+Google senior data scientist projects.
+
+
+Wages Dataset Question
+```{r}
+
+#read in dataset & explore
+wages <- read.csv('wages.csv')
+
+cor(wages)
+head(wages)
+str(wages)
+View(wages)
+
+```
+
+(a) Estimate the above regression model using OLS. Is there any problem with the output?  
+
+(answer to a) yes, for "ols_wages_coef," the "exp" variable is returning NA 
+
+```{r}
+
+ols_wages <- lm(wage~., data = wages)
+
+ols_wages_coef <- data.frame(ols_wages$coefficients)
+ols_wages_pred <- predict(ols_wages)
+
+View(ols_wages_coef)
+head(ols_wages_pred)
+
+
+```
+(answer to a) Yes, there is a problem with the output. For "ols_wages_coef," the "exp" variable is returning NA. Initially thought there might be null values in the data, or the data needed to be normalized, but neither actions revealed the problem. Researched the problem, and apparently it is because the lm will discard any linearly dependent variables as unidentifiable. 
+
+https://stackoverflow.com/questions/7337761/linear-regression-na-estimate-just-for-last-coefficient
+
+Verify the data, correct the OLS model and provide estimates for the slope parameters as well as their associated standard errors.
+
+```{r}
+
+#doublechecking to see if the exp variable has null or missing values.
+is.na(wages$exp)
+```
+
+```{r}
+#there are no missing values, so will attempt to standardize variables
+
+wages_stand <- data.frame(scale(wages))
+
+ols_wages <- lm(wage~., data = wages_stand)
+summary(ols_wages) #Ok so what does this tell us? 
+
+ols_wages_coef <- data.frame(ols_wages$coefficients)
+View(ols_wages)
+
+#ols_wage_pred <- predict(ols_wages, wages_stand) prediction from a rank-deficient fit may be misleading
+ 
+ols_wage_pred <- predict(ols_wages) 
+head(ols_wages_pred)
+head(wages_stand$wage)
+
+```
+
+
+```{r}
+
+#standardizing did not correct the NA, therefore changing model so that linearly dependent variable is not discarded
+
+
+ols_wages <- lm(exp~., data = wages_stand) 
+summary(ols_wages) #slope parameters, standard error
+ols_wages_coef <- data.frame(ols_wages$coefficients)
+
+summary(ols_wages_coef)
+#ols_wage_pred <- predict(ols_wages, wages_stand) prediction from a rank-deficient fit may be misleading
+ 
+ols_wages_pred <- predict(ols_wages) 
+summary(ols_wages_pred)
+head(ols_wages_pred)
+head(wages_stand$exp)
+```
+
+```{r}
+
+
+#utilizing stepwise to reduce features in wages dataset, got most interesting comment ive ever seen from R: "attempting model selection on an essentially perfect fit is nonsense"
+library(leaps)
+
+null2=lm(exp~1, data=wages)
+full2=lm(exp~., data=wages)
+step(null2, scope=list(lower=null2, upper=full2), direction="forward")
+
+#see Line
+
+```
+
+
+
+
+
+Social Dataset Question
+```{r}
+
+
+#read in dataset & explore
+social <- read.csv('social.csv')
+
+#read in dataset & explore
+cor(social)
+head(social)
+str(social)
+View(social)
+summary(social)
+
+```
+
+
+(a) Use ordinary least squares in R to estimate the parameter effects on y. Why couldn’t can’t you get estimates for all the variables in the data set; what is wrong?
+
+
+```{r}
+
+
+
+social_stand <- data.frame(scale(social))
+
+ols_social <- lm(y~., data = social_stand)
+summary(ols_social)  
+
+ols_social_coef <- data.frame(ols_social$coefficients)
+View(ols_social)
+ 
+ols_social_pred <- predict(ols_social) 
+head(ols_social_pred)
+head(social_stand$y)
+
+
+
+```
+
+Answer to (a): results yeild "ALL 19 residuals are 0: no residual degrees of freedom." Several NA values.  also,  "Coefficients: (2 not defined because of singularities)"
+
+
+(b) How could you choose the most important variables to the model and estimate them?
+
+Random Forest, Relative Importance, and Mars Model can be used to find the most important variable to estimate. 
+
+
+```{r}
+
+
+sum(is.na(social_stand)) #doublechecking to see if there are missing values
+
+
+```
+
+(c) Provide estimates for the most important social parameters.
+
+Parameter X14 appears to be the most important, distantly followed by X3, X20, X9, and X8. 
+
+```{r}
+
+#attempt at MARS method doesnt plot anoything... 
+#library(earth)
+
+#marsModel <- earth(y ~ ., data=social) # build model
+
+#ev <- evimp (marsModel) # estimate variable importance
+
+#plot (ev)
+
+
+#attempt at Random Forest method only outputs zeros.... 
+
+#library(party)
+
+#cf1 <- cforest(y ~ . , data= social, control=cforest_unbiased(mtry=2,ntree=50)) # fit the random forest
+
+#varimp(cf1) # get variable importance, based on mean decrease in accuracy
+
+#varimp(cf1, conditional=TRUE)  # conditional=True, adjusts for correlations between predictors
+
+#varimpAUC(cf1)  # more robust towards class imbalance.
+
+
+#attempt at Relative Importance, but "Too few complete observations for estimating this model"
+
+#library(relaimpo)
+
+
+#attempt at using feature selection methods in RandomForest CARET, MLBENCH libraries
+
+library(randomForest)
+cor(social,social$y)
+social_rf = randomForest(y~., data=social)
+# Create an importance based on mean decreasing gini
+importance(social_rf) #list of relative importance
+varImpPlot(social_rf) #plot based on relative imporatance
+
+
+```
+
+
+```{r}
+#utilizing stepwise to reduce features in social dataset
+library(leaps)
+
+null=lm(y~1, data=social)
+full=lm(y~., data=social)
+step(null, scope=list(lower=null, upper=full), direction="forward")
+
+```
+
+
+```{r}
+#Principle Components Analyses with STATS
+
+library(stats)
+
+pca_social <- prcomp(social, scale. = TRUE)
+
+#sqrt of eighenvalues
+
+pca_social$sdev
+
+head(pca_social$rotation)
+
+head(pca_social$x)
+
+```
+
+
+```{r}
+
+#Principle Components Analyses with FactoMineR
+
+library(FactoMineR)
+
+# apply PCA for social 
+pca_social2 = PCA(social, graph = FALSE)
+
+# matrix with eigenvalues
+pca_social2$eig
+
+pca_social2$var$coord
+
+# apply PCA for wages
+pca_wages = PCA(wages, graph = FALSE)
+
+# matrix with eigenvalues
+pca_wages$eig
+
+pca_wages$var$coord
+
+
+
+
+
+```
