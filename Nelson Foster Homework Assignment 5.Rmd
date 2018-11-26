@@ -1,0 +1,186 @@
+---
+title: "Nelson Foster Homework Assignment 5"
+author: "Nelson Foster"
+date: "4/18/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+Homework Assignment # 5 DATS 6101
+Spring 2017
+
+Problem A
+[Subsetting]
+
+Use various methods (forward, backward, seqrep) in regsubsets to identify risk factors associated with giving birth to an underweight baby (weighing less than 2500 grams). Compare the results for the different methods.
+Use “lowbwt.xls” file under assignment 5 section on the blackboard.
+
+
+```{r}
+library(pastecs)
+library(leaps)
+library(ISLR)
+library(bestglm)
+
+low <-read.csv("lowbwt.csv")
+```
+
+```{r}
+
+#plotting data
+
+str(low)
+
+```
+
+
+```{r}
+#converting some integers to factors
+
+
+low$RACE = factor(low$RACE)
+
+
+```
+
+
+```{r}
+
+#plot(cars$speed, cars$dist, main = "Cars Plot", xlab="Speed", ylab="Distance")
+
+plot(low$LOW, low$SMOKE, main = "Low BWT Plot", xlab="LowBwt", ylab="Smoke")
+plot(low$LOW, low$RACE, main = "Low BWT Plot2", xlab="LowBwt", ylab="RACE")
+scatter.smooth(low)
+stat.desc(low)
+
+```
+
+```{r}
+
+#an attempt at best fit
+low.best <- regsubsets(LOW~., data = low, nvmax = 19)
+
+plot(low.best, scale = "adjr2", main = "Adjusted R^2")
+summary(low.best)
+plot(low.best)
+```
+```{r}
+lowx <- lm(SMOKE~LOW, data = low)
+head(lowx)
+summary(lowx)
+```
+
+
+```{r}
+
+#examining relationship between birthweight lower than >= 2500g
+
+lowx1 <- lm(SMOKE~BWT,data = subset(low,BWT >=2500))
+summary(lowx1)
+```
+
+```{r}
+#initial models showing low mutlple r^2 numbes, switching to stepwise
+
+#backward
+low.back <- regsubsets(LOW~., data = low, method = "backward", nvmax = 10)
+#The plot will show the Adjust R^2 when using the variables across the bottom
+plot(low.back, scale = "adjr2", main = "Adjusted R^2")
+summary(low.back)
+
+
+#forward
+low.forward <- regsubsets(LOW~., data = low, nvmax = 10, nbest = 1, method = "forward")
+
+summary(low.forward)
+
+
+plot(low.forward, scale = "adjr2", main = "Adjusted R^2")
+low.forward
+
+
+#hybrid approach
+low.seqrep <- regsubsets(LOW~., data = low,nvmax = 10, nbest = 1, method = "seqrep")
+
+plot(low.seqrep, scale = "Cp", main = "Cp")
+
+low.seqrep
+summary(low.seqrep)
+#easier way to view the results in the summary 
+summary(low.seqrep,matrix.logical = TRUE)
+```
+
+
+```{r}
+head(low)
+```
+
+Answer to Problem A
+
+When running the best fit analysis, the best predictors were the AGE, PTL, HT, UI, and BWT measures. This was also the result when running the forward and backwards stepwise methods, with the addition of the SMOKE variable. In the hybrid (Cp) method,it was narrowed down to four key predictors: PTL, HT, UI, and BWT. 
+
+
+Problem B
+[PCR]
+Define test sets and training sets  using “lowbwt.xls”  to identify  risk factors associated with giving birth to an underweight baby (weighing less than 2500 grams).  Do PCR on the training set and then use cross-validation. Go through ALL the relevant steps : model selection, validation, interpretation, etc.
+Use “lowbwt.xls” file under assignment 5 section on the blackboard.
+
+
+
+```{r}
+#initial model
+#(research: https://www.r-bloggers.com/performing-principal-components-regression-pcr-in-r/)
+library(pls)
+require(pls)
+set.seed (1)
+pcr_model <- pcr(LOW~., data = low, scale = TRUE, validation = "CV")
+summary(pcr_model)
+```
+
+
+
+
+
+```{r}
+#cross-validtions
+validationplot(pcr_model)
+validationplot(pcr_model, val.type="MSEP")
+validationplot(pcr_model, val.type = "R2")
+predplot(pcr_model)
+coefplot(pcr_model)
+
+````
+
+```{r}
+
+
+# Train-test split
+pcr.train <- low[1:150,]
+pcr.y_test <- low[150:189, 1]
+pcr.test <- low[150:189, 1:11]
+```
+    
+```{r}
+pcr_model2 <- pcr(LOW~., data = pcr.train, scale =TRUE, validation = "CV")
+pcr_pred <- predict(pcr_model2, pcr.test, ncomp = 3)
+mean((pcr_pred - pcr.y_test)^2)
+
+
+```
+```{r}
+
+#cross-validtions
+validationplot(pcr_model2)
+validationplot(pcr_model2, val.type="MSEP")
+validationplot(pcr_model2, val.type = "R2")
+predplot(pcr_model2)
+coefplot(pcr_model2)
+```
+Problem B: Model interpretations
+
+The cross-validation plots (Coefficient, validation) for both models (pcr_model and pcr_model2) appear to show that the models fairly successfuly capture the variation in the dataset, and had low outputs for the Mean Standard Error plots. However, the predictor plots show no correlation, which makes me think that the PCR models may be overfitted. 
+
+
+
