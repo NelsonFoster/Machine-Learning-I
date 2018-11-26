@@ -1,0 +1,235 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Feb 26 12:42:36 2018
+
+@author: Nelson Foster
+DATS 6202
+Machine Learning I 
+Homework 3 | Decison Trees
+"""
+
+#importing initial packages
+
+import pandas as pd
+import numpy as np
+import scipy
+import matplotlib.pyplot as plt
+from sklearn import tree
+import sklearn as sk 
+
+
+
+
+#read in dataset
+
+
+
+pregnancy = pd.read_csv('pregnancy.csv')
+
+#Exploratory Data Analysis
+
+print (pregnancy)
+
+pregnancy.describe()
+
+
+pregnancy.head()
+pregnancy.tail()
+
+list(pregnancy)
+
+#create data frames 
+
+pregtest = pd.DataFrame(pregnancy['Pregnancy Test'])
+birthcontrol = pd.DataFrame(pregnancy['Birth Control'])
+FemHygiene = pd.DataFrame(pregnancy['Feminine Hygiene'])
+FolicAcid = pd.DataFrame(pregnancy['Folic Acid'])
+PrenatalV = pd.DataFrame(pregnancy['Prenatal Vitamins'])
+PrenatalY = pd.DataFrame(pregnancy['Prenatal Yoga'])
+BodyPillow = pd.DataFrame(pregnancy['Body Pillow'])
+GingerAle = pd.DataFrame(pregnancy['Ginger Ale'])
+SeaBands = pd.DataFrame(pregnancy['Sea Bands'])
+StopBuyCigs = pd.DataFrame(pregnancy['Stopped buying ciggies'])
+Cigarettes = pd.DataFrame(pregnancy['Cigarettes'])
+StopSmoke = pd.DataFrame(pregnancy['Smoking Cessation'])
+StopBuyWine = pd.DataFrame(pregnancy['Stopped buying wine'])
+Wine = pd.DataFrame(pregnancy['Wine'])
+MatClothes = pd.DataFrame(pregnancy['Maternity Clothes'])
+Pregnant = pd.DataFrame(pregnancy['PREGNANT'])
+
+#import packages for decision trees and visualizations
+
+from IPython.display import Image
+ 
+import pydotplus
+import graphviz
+
+
+#Create First Decision Tree usint Entropy Method
+
+decision_tree = tree.DecisionTreeClassifier(
+    criterion='entropy',
+    max_features=1,
+    max_depth=4,
+    random_state = 1000
+)
+
+
+decision_tree.fit(Pregnant, PrenatalV)
+
+sk.tree.export_graphviz(decision_tree)
+
+
+# Render first tree.
+dot_data = tree.export_graphviz(
+    decision_tree, out_file=None,
+    feature_names=Pregnant.columns,
+    class_names=['Not Pregnant', 'Pregnant'],
+    filled=True
+)
+####Fixes the image rendering problem
+import os
+import sys
+
+def conda_fix(graph):
+        path = os.path.join(sys.base_exec_prefix, "Library", "bin", "graphviz")
+        paths = ("dot", "twopi", "neato", "circo", "fdp")
+        paths = {p: os.path.join(path, "{}.exe".format(p)) for p in paths}
+        graph.set_graphviz_executables(paths)
+######
+  
+graph = pydotplus.graph_from_dot_data(dot_data)
+conda_fix(graph)
+Image(graph.create_png())
+
+#create second decision tree using Gini method
+
+decision_tree2 = tree.DecisionTreeClassifier(
+    criterion='Gini',
+    max_features=1,
+    max_depth=4,
+    random_state = 1000
+)
+
+
+# Render second tree.
+dot_data2 = tree.export_graphviz(
+    decision_tree2, out_file=None,
+    feature_names=Pregnant.columns,
+    class_names=['Not Pregnant', 'Pregnant'],
+    filled=True
+)
+
+  
+graph = pydotplus.graph_from_dot_data(dot_data2)
+conda_fix(graph)
+Image(graph.create_png())
+
+
+#regression-based decision tree
+
+from sklearn.tree import DecisionTreeRegressor
+import pandas as pd
+
+
+X = pregtest
+y = Pregnant
+
+tree_clf_reg = DecisionTreeRegressor(max_depth=2, random_state=42)
+tree_clf_reg.fit(X, y)
+
+
+dot_data3=tree.export_graphviz(tree_clf_reg, out_file=None,feature_names=pregtest.feature_names[2:],class_names=Pregnant.target_names,filled=True, rounded=True,
+                               special_characters=True)
+
+
+graph_pregnancy = pydotplus.graph_from_dot_data(dot_data3) 
+#Makes graphviz find the right directory
+conda_fix(graph_pregnancy)
+#Finally producers the actual graphic
+Image(graph_pregnancy.create_png())
+
+#confusion matrix 
+
+from sklearn.metrics import roc_curve, auc
+import matplotlib.pyplot as plt
+
+clfpred = clf.predict(pregnancy.PREGNANT)
+sk.metrics.confusion_matrix(y,clfpred)
+
+regpred = tree_clf_reg_full.predict(pregnancy.data)
+sk.metrics.confusion_matrix(y,regpred)
+
+
+
+#ROC
+
+pregpred = decision_tree.predict(pregtest)
+Pregnant
+pregpred
+
+
+sk.metrics.confusion_matrix(Pregnant, pregpred)
+
+#The roc_curve has three outputs fpr:false positive rate, tpr: true positive rate and thresholds
+false_positive_rate, true_positive_rate, thresholds = roc_curve(Pregnant, pregpred) #Here we are developing variables for each output
+
+roc_auc = auc(false_positive_rate, true_positive_rate)
+
+
+plt.title('Receiver Operating Characteristic')
+plt.plot(false_positive_rate, true_positive_rate, 'b',
+label='AUC = %0.2f'% roc_auc)
+plt.legend(loc='lower right')
+plt.plot([0,1],[0,1],'r--')
+plt.xlim([-0.1,1.2])
+plt.ylim([-0.1,1.2])
+plt.ylabel('True Positive Rate')
+plt.xlabel('False Positive Rate')
+plt.show()
+
+sk.metrics.roc_curve(Pregnant,pregpred) # Stand alone outside of the above process
+
+
+                    
+                    
+#%% Ensemble example
+
+from sklearn.model_selection import train_test_split
+
+
+#Load in the models we will be using 
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import SVC
+from sklearn.ensemble import VotingClassifier
+
+
+#Use the train test function on the pregnancy dataset
+X, y = Pregnant(n_samples=500, noise=0.30, random_state=1)
+X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=1)
+
+#Next we are establishing the variables for each of our models
+log_clf = LogisticRegression(random_state=1)
+rnd_clf = RandomForestClassifier(random_state=1)
+svm_clf = SVC(random_state=1)
+
+#Next we are just developing a voting classifier as we discussed that uses hard voting to develop an ensemble method
+voting_clf = VotingClassifier(
+    estimators=[('lr', log_clf), ('rf', rnd_clf), ('svc', svm_clf)],
+    voting='hard')
+voting_clf.fit(X_train, y_train)
+
+#Now let's see how we did
+from sklearn.metrics import accuracy_score # This metric calculates the error rate for each of our models
+
+for clf in (log_clf, rnd_clf, svm_clf, voting_clf):
+    clf.fit(X_train, y_train)
+    y_pred = clf.predict(X_test)
+    print(clf.__class__.__name__, accuracy_score(y_test, y_pred))
+
+
+
+
+
